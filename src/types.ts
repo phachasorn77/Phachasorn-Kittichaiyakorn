@@ -25,19 +25,19 @@ export interface GeneralInfo {
 export interface FollowUpRecord {
   id: string;
   date: string;
-  woundStatus: 'Normal' | 'Erythema' | 'Discharge' | 'InfectionSuspected' | 'Other';
-  woundStatusCustom?: string;
-  hasPain: boolean;
-  hasSwelling: boolean;
   hasRedness: boolean;
+  hasSwelling: boolean;
   hasHeat: boolean;
+  hasPain: boolean;
   hasPus: boolean;
-  hasFever: boolean;
   isWoundDehiscence: boolean;
+  hasOdor: boolean;
+  hasFever: boolean;
   outcome: 'Continue' | 'Discharged' | 'ReferToMD';
   assessorName: string;
   notes: string;
   timestamp: number;
+  completedNursingInterventions?: string[];
 }
 
 export interface AssessmentRecord {

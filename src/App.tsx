@@ -73,6 +73,53 @@ const RISK_LEVELS = {
   }
 } as const;
 
+const POST_OP_SSI_RISK_LEVELS = {
+  Low: {
+    label: 'Low Risk',
+    color: 'text-green-600 bg-green-50 border-green-100',
+    dot: 'bg-green-500',
+    emoji: '🟢',
+    scoreRange: '0–2 ข้อ',
+    instructions: [
+      'ประเมินแผลและ Vital signs',
+      'ทำแผลด้วย Aseptic technique',
+      'ส่งเสริมสุขอนามัย โภชนาการ และการเคลื่อนไหว',
+      'ให้คำแนะนำการสังเกตอาการติดเชื้อ'
+    ]
+  },
+  Moderate: {
+    label: 'Moderate Risk',
+    color: 'text-yellow-600 bg-yellow-50 border-yellow-100',
+    dot: 'bg-yellow-500',
+    emoji: '🟡',
+    scoreRange: '3–4 ข้อ',
+    instructions: [
+      'ประเมินแผล ทุกเวร และ Vital signs',
+      'ทำแผลด้วย Aseptic technique',
+      'ควบคุมระดับน้ำตาลในเลือด',
+      'ประเมินภาวะโภชนาการ',
+      'ดูแลสายระบาย/อุปกรณ์ด้วยหลักปลอดเชื้อ',
+      'ส่งเสริมการเคลื่อนไหวและให้ความรู้เรื่องอาการติดเชื้อ'
+    ]
+  },
+  High: {
+    label: 'High Risk',
+    color: 'text-red-600 bg-red-50 border-red-100',
+    dot: 'bg-red-500',
+    emoji: '🔴',
+    scoreRange: '≥5 ข้อ',
+    instructions: [
+      'ประเมินแผลและ Vital signs อย่างใกล้ชิด',
+      'ทำแผลด้วย Aseptic technique อย่างเคร่งครัด',
+      'ควบคุมระดับน้ำตาลและติดตามภาวะโภชนาการ',
+      'ดูแลสายระบาย/อุปกรณ์ด้วยหลักปลอดเชื้อ',
+      'ติดตาม CBC/WBC และผลเพาะเชื้อ (ตามแผนการรักษา)',
+      'ให้ยาปฏิชีวนะตามแผนการรักษา',
+      'เฝ้าระวัง SSI/Sepsis และรายงานแพทย์เมื่อพบความผิดปกติ'
+    ]
+  }
+} as const;
+
 const TRACHEOSTOMY_INSTRUCTIONS = {
   Low: {
     items: [
@@ -122,6 +169,41 @@ const ORAL_SURGERY_INSTRUCTIONS = {
       'เฝ้าระวัง infection ใกล้ชิด'
     ]
   }
+};
+
+const getPostOpSsiRisk = (fu: {
+  hasRedness: boolean;
+  hasSwelling: boolean;
+  hasHeat: boolean;
+  hasPain: boolean;
+  hasPus: boolean;
+  isWoundDehiscence: boolean;
+  hasOdor: boolean;
+  hasFever: boolean;
+}) => {
+  const count = [
+    fu.hasRedness,
+    fu.hasSwelling,
+    fu.hasHeat,
+    fu.hasPain,
+    fu.hasPus,
+    fu.isWoundDehiscence,
+    fu.hasOdor,
+    fu.hasFever
+  ].filter(Boolean).length;
+
+  let level: 'Low' | 'Moderate' | 'High' = 'Low';
+  if (count >= 5) {
+    level = 'High';
+  } else if (count >= 3) {
+    level = 'Moderate';
+  }
+
+  return {
+    count,
+    level,
+    config: POST_OP_SSI_RISK_LEVELS[level]
+  };
 };
 
 export default function App() {
@@ -179,18 +261,18 @@ export default function App() {
 
   const initialFollowUpForm = {
     date: format(new Date(), 'yyyy-MM-dd'),
-    woundStatus: 'Normal' as 'Normal' | 'Erythema' | 'Discharge' | 'InfectionSuspected' | 'Other',
-    woundStatusCustom: '',
-    hasPain: false,
-    hasSwelling: false,
     hasRedness: false,
+    hasSwelling: false,
     hasHeat: false,
+    hasPain: false,
     hasPus: false,
-    hasFever: false,
     isWoundDehiscence: false,
+    hasOdor: false,
+    hasFever: false,
     outcome: 'Continue' as 'Continue' | 'Discharged' | 'ReferToMD',
     assessorName: '',
-    notes: ''
+    notes: '',
+    completedNursingInterventions: [] as string[]
   };
 
   const [followUpForm, setFollowUpForm] = useState(initialFollowUpForm);
@@ -379,19 +461,19 @@ export default function App() {
     const newFollowUp: FollowUpRecord = {
       id: crypto.randomUUID(),
       date: followUpForm.date,
-      woundStatus: followUpForm.woundStatus,
-      woundStatusCustom: followUpForm.woundStatus === 'Other' ? followUpForm.woundStatusCustom : undefined,
-      hasPain: followUpForm.hasPain,
-      hasSwelling: followUpForm.hasSwelling,
       hasRedness: followUpForm.hasRedness,
+      hasSwelling: followUpForm.hasSwelling,
       hasHeat: followUpForm.hasHeat,
+      hasPain: followUpForm.hasPain,
       hasPus: followUpForm.hasPus,
-      hasFever: followUpForm.hasFever,
       isWoundDehiscence: followUpForm.isWoundDehiscence,
+      hasOdor: followUpForm.hasOdor,
+      hasFever: followUpForm.hasFever,
       outcome: followUpForm.outcome,
       assessorName: followUpForm.assessorName,
       notes: followUpForm.notes,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      completedNursingInterventions: followUpForm.completedNursingInterventions
     };
 
     const updatedRecords = records.map(record => {
@@ -431,6 +513,29 @@ export default function App() {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
+  };
+
+  const handleToggleTimelineNursingItem = (patientId: string, followUpId: string, instruction: string) => {
+    const updatedRecords = records.map(record => {
+      if (record.id === patientId) {
+        const updatedFollowUps = (record.followUps || []).map(fu => {
+          if (fu.id === followUpId) {
+            const currentInterventions = fu.completedNursingInterventions || [];
+            const nextInterventions = currentInterventions.includes(instruction)
+              ? currentInterventions.filter(i => i !== instruction)
+              : [...currentInterventions, instruction];
+            return {
+              ...fu,
+              completedNursingInterventions: nextInterventions
+            };
+          }
+          return fu;
+        });
+        return { ...record, followUps: updatedFollowUps };
+      }
+      return record;
+    });
+    setRecords(updatedRecords);
   };
 
   const filteredRecordsForFollowUp = useMemo(() => {
@@ -903,23 +1008,24 @@ export default function App() {
                               <p>HN: {patient.hn} | อายุ {patient.age} ปี</p>
                               <p className="truncate">Dx: {patient.dx || '-'}</p>
                               {latestFollowUp ? (
-                                <p className={cn(
-                                  "flex items-center gap-1 text-[11px] mt-2 px-2 py-1 rounded-lg w-fit font-bold",
-                                  latestFollowUp.outcome === 'ReferToMD' ? "bg-red-50 text-red-600" :
-                                  latestFollowUp.outcome === 'Discharged' ? "bg-green-50 text-green-600" :
-                                  "bg-blue-50 text-blue-600"
-                                )}>
-                                  <span className={cn(
-                                    "w-1.5 h-1.5 rounded-full",
-                                    latestFollowUp.outcome === 'ReferToMD' ? "bg-red-500 animate-pulse" :
-                                    latestFollowUp.outcome === 'Discharged' ? "bg-green-500" : "bg-blue-500"
-                                  )} />
-                                  ล่าสุด: {latestFollowUp.woundStatus === 'Normal' ? 'แผลปกติ' 
-                                    : latestFollowUp.woundStatus === 'Erythema' ? 'แผลแดง/บวม'
-                                    : latestFollowUp.woundStatus === 'Discharge' ? 'มีสารคัดหลั่ง'
-                                    : latestFollowUp.woundStatus === 'InfectionSuspected' ? 'สงสัยติดเชื้อ'
-                                    : 'อื่นๆ'} ({latestFollowUp.outcome === 'Continue' ? 'ติดตามต่อ' : latestFollowUp.outcome === 'Discharged' ? 'จำหน่าย' : 'ส่งต่อแพทย์'})
-                                </p>
+                                (() => {
+                                  const hasAnySymptom = latestFollowUp.hasRedness || latestFollowUp.hasSwelling || latestFollowUp.hasHeat || latestFollowUp.hasPain || latestFollowUp.hasPus || latestFollowUp.isWoundDehiscence || latestFollowUp.hasOdor || latestFollowUp.hasFever;
+                                  return (
+                                    <p className={cn(
+                                      "flex items-center gap-1 text-[11px] mt-2 px-2 py-1 rounded-lg w-fit font-bold",
+                                      latestFollowUp.outcome === 'ReferToMD' ? "bg-red-50 text-red-600" :
+                                      latestFollowUp.outcome === 'Discharged' ? "bg-green-50 text-green-600" :
+                                      "bg-blue-50 text-blue-600"
+                                    )}>
+                                      <span className={cn(
+                                        "w-1.5 h-1.5 rounded-full",
+                                        latestFollowUp.outcome === 'ReferToMD' ? "bg-red-500 animate-pulse" :
+                                        latestFollowUp.outcome === 'Discharged' ? "bg-green-500" : "bg-blue-500"
+                                      )} />
+                                      ล่าสุด: {!hasAnySymptom ? 'แผลปกติ' : 'พบอาการเสี่ยงติดเชื้อ'} ({latestFollowUp.outcome === 'Continue' ? 'ติดตามต่อ' : latestFollowUp.outcome === 'Discharged' ? 'จำหน่าย' : 'ส่งต่อแพทย์'})
+                                    </p>
+                                  );
+                                })()
                               ) : (
                                 <p className="text-amber-600 flex items-center gap-1 text-[11px] mt-2 bg-amber-50 px-2 py-1 rounded-lg w-fit">
                                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -1032,55 +1138,21 @@ export default function App() {
                           />
                         </div>
 
-                        {/* Wound Status Selector */}
-                        <div className="flex flex-col gap-1.5">
-                          <span className="text-xs font-bold">ลักษณะบาดแผลผ่าตัด:</span>
-                          <div className="grid grid-cols-2 gap-2">
-                            {([
-                              { key: 'Normal', label: 'แผลปกติ (Normal)' },
-                              { key: 'Erythema', label: 'ขอบแผลแดง/บวม' },
-                              { key: 'Discharge', label: 'มีสารคัดหลั่ง/หนอง' },
-                              { key: 'InfectionSuspected', label: 'สงสัยติดเชื้อ (SSI)' },
-                              { key: 'Other', label: 'อื่นๆ' }
-                            ] as const).map((ws) => (
-                              <button
-                                key={ws.key}
-                                type="button"
-                                onClick={() => setFollowUpForm({ ...followUpForm, woundStatus: ws.key })}
-                                className={cn(
-                                  "px-3 py-2 text-left rounded-xl text-[11px] font-bold border transition-all",
-                                  followUpForm.woundStatus === ws.key
-                                    ? "bg-black border-black text-white"
-                                    : "bg-gray-50 border-gray-100 text-gray-600 hover:bg-gray-100"
-                                )}
-                              >
-                                {ws.label}
-                              </button>
-                            ))}
-                          </div>
-                          {followUpForm.woundStatus === 'Other' && (
-                            <input
-                              type="text"
-                              placeholder="โปรดระบุลักษณะแผล..."
-                              value={followUpForm.woundStatusCustom}
-                              onChange={(e) => setFollowUpForm({ ...followUpForm, woundStatusCustom: e.target.value })}
-                              className="mt-1 bg-gray-50 border-none rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-black animate-slideIn"
-                            />
-                          )}
-                        </div>
+
 
                         {/* SSI Checkboxes */}
                         <div className="pt-2 border-t border-gray-100">
-                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">ประเมินอาการและอาการแสดงของการติดเชื้อ (SSI):</span>
+                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Post-op SSI Assessment Checklist:</span>
                           <div className="space-y-2.5">
                             {[
-                              { key: 'hasPain', label: 'ปวดบาดแผลผ่าตัดมากผิดปกติ' },
-                              { key: 'hasSwelling', label: 'แผลบวม ผิวหนังตึง' },
-                              { key: 'hasRedness', label: 'แผลแดงเป็นบริเวณกว้าง' },
-                              { key: 'hasHeat', label: 'ผิวหนังรอบแผลร้อนจัด' },
-                              { key: 'hasPus', label: 'มีหนอง (Pus) ไหลซึมออกจากแผล' },
-                              { key: 'hasFever', label: 'มีไข้หลังผ่าตัด (> 38 องศาเซลเซียส)' },
-                              { key: 'isWoundDehiscence', label: 'แผลแยก หรือไหมเย็บขาด (Dehiscence)' }
+                              { key: 'hasRedness', label: 'แผลแดง (Redness)' },
+                              { key: 'hasSwelling', label: 'แผลบวม (Swelling/Edema)' },
+                              { key: 'hasHeat', label: 'แผลร้อน (Warmth)' },
+                              { key: 'hasPain', label: 'ปวดแผลเพิ่มขึ้น (Increasing pain)' },
+                              { key: 'hasPus', label: 'มีสารคัดหลั่ง/หนองจากแผล (Purulent discharge)' },
+                              { key: 'isWoundDehiscence', label: 'แผลแยก (Wound dehiscence)' },
+                              { key: 'hasOdor', label: 'มีกลิ่นผิดปกติจากแผล' },
+                              { key: 'hasFever', label: 'มีไข้ ≥ 38°C' }
                             ].map((item) => (
                               <label key={item.key} className="flex items-center gap-3 cursor-pointer select-none">
                                 <input
@@ -1098,11 +1170,10 @@ export default function App() {
                         {/* Outcome Choice */}
                         <div className="pt-2 border-t border-gray-100">
                           <span className="text-xs font-bold block mb-2">ผลการติดตามอาการ:</span>
-                          <div className="grid grid-cols-3 gap-1.5">
+                          <div className="grid grid-cols-2 gap-1.5">
                             {[
                               { key: 'Continue', label: 'ติดตามอาการต่อ', color: 'border-blue-100 text-blue-700 bg-blue-50' },
-                              { key: 'Discharged', label: 'จำหน่าย/แผลหาย', color: 'border-green-100 text-green-700 bg-green-50' },
-                              { key: 'ReferToMD', label: 'ส่งต่อแพทย์ ⚠️', color: 'border-red-100 text-red-700 bg-red-50' }
+                              { key: 'Discharged', label: 'จำหน่าย/แผลหาย', color: 'border-green-100 text-green-700 bg-green-50' }
                             ].map((opt) => (
                               <button
                                 key={opt.key}
@@ -1119,18 +1190,6 @@ export default function App() {
                               </button>
                             ))}
                           </div>
-                        </div>
-
-                        {/* Notes */}
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs font-bold">บันทึกเพิ่มเติม/การพยาบาลที่ให้:</span>
-                          <textarea
-                            rows={2}
-                            value={followUpForm.notes}
-                            onChange={(e) => setFollowUpForm({ ...followUpForm, notes: e.target.value })}
-                            placeholder="เช่น แนะนำเรื่องสุขวิทยาส่วนบุคคล, สังเกตไข้, สมานแผลเรียบร้อย..."
-                            className="bg-gray-50 border-none rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-black transition-all"
-                          />
                         </div>
 
                         {/* Follow-up assessor name */}
@@ -1175,7 +1234,7 @@ export default function App() {
                     ) : (
                       <div className="relative border-l border-gray-200 ml-4 space-y-6 pt-2">
                         {selectedPatient.followUps.map((fu) => {
-                          const hasAnySymptom = fu.hasPain || fu.hasSwelling || fu.hasRedness || fu.hasHeat || fu.hasPus || fu.hasFever || fu.isWoundDehiscence;
+                          const hasAnySymptom = fu.hasRedness || fu.hasSwelling || fu.hasHeat || fu.hasPain || fu.hasPus || fu.isWoundDehiscence || fu.hasOdor || fu.hasFever;
                           
                           return (
                             <div key={fu.id} className="relative pl-6">
@@ -1206,27 +1265,55 @@ export default function App() {
                                 <div className="space-y-1.5 text-xs text-gray-700">
                                   <p className="font-semibold flex items-center gap-1.5">
                                     <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-                                    ลักษณะแผล: {fu.woundStatus === 'Normal' ? <span className="text-green-600 font-bold">ปกติ (Normal)</span>
-                                      : fu.woundStatus === 'Erythema' ? <span className="text-amber-600 font-bold">ขอบแผลแดง/บวม</span>
-                                      : fu.woundStatus === 'Discharge' ? <span className="text-red-500 font-bold">มีสารคัดหลั่ง/หนอง</span>
-                                      : fu.woundStatus === 'InfectionSuspected' ? <span className="text-red-600 font-bold">สงสัยติดเชื้อ (SSI) ⚠️</span>
-                                      : <span className="text-gray-700 font-bold">อื่นๆ ({fu.woundStatusCustom})</span>}
+                                    สถานะ: {!hasAnySymptom ? <span className="text-green-600 font-bold">ปกติ (ไม่มีอาการแสดงของการติดเชื้อ)</span> : <span className="text-red-500 font-bold">พบอาการแสดงของการติดเชื้อ ⚠️</span>}
                                   </p>
 
                                   {hasAnySymptom && (
                                     <div className="bg-red-50/50 p-2 rounded-lg border border-red-100/50 space-y-1">
                                       <p className="text-[10px] font-bold text-red-600">อาการติดเชื้อที่ตรวจพบ:</p>
                                       <div className="flex flex-wrap gap-1">
-                                        {fu.hasPain && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">ปวดแผลมาก</span>}
-                                        {fu.hasSwelling && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">แผลบวม</span>}
                                         {fu.hasRedness && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">แผลแดง</span>}
+                                        {fu.hasSwelling && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">แผลบวม</span>}
                                         {fu.hasHeat && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">แผลร้อน</span>}
-                                        {fu.hasPus && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">มีหนอง</span>}
-                                        {fu.hasFever && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">มีไข้</span>}
+                                        {fu.hasPain && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">ปวดแผลเพิ่มขึ้น</span>}
+                                        {fu.hasPus && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">มีหนอง/สารคัดหลั่ง</span>}
                                         {fu.isWoundDehiscence && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">แผลแยก</span>}
+                                        {fu.hasOdor && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">มีกลิ่นผิดปกติ</span>}
+                                        {fu.hasFever && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md">มีไข้ ≥ 38°C</span>}
                                       </div>
                                     </div>
                                   )}
+
+                                  {/* Post-op SSI Risk and Guidelines on the Timeline Card */}
+                                  {(() => {
+                                    const { count, level, config } = getPostOpSsiRisk(fu);
+                                    return (
+                                      <div className={cn("p-3 rounded-xl border mt-2 space-y-2", config.color)}>
+                                        <div className="flex justify-between items-center text-[10px]">
+                                          <span className="font-bold flex items-center gap-1 text-gray-800">
+                                            <Activity size={10} className="text-gray-600" />
+                                            ประเมินความเสี่ยง SSI:
+                                          </span>
+                                          <span className="font-black bg-white/70 px-1.5 py-0.5 rounded shadow-xs">
+                                            {config.emoji} {config.label} ({count} ข้อ)
+                                          </span>
+                                        </div>
+                                        <div className="text-[10px] pl-1 border-l-2 border-black/10 space-y-1.5">
+                                          <p className="font-bold text-[9px] text-gray-400 uppercase tracking-wider">
+                                            แนวทางการพยาบาล ({config.scoreRange}):
+                                          </p>
+                                          <div className="space-y-1">
+                                            {config.instructions.map((inst, i) => (
+                                              <div key={i} className="flex items-start gap-1.5 text-[10px] font-semibold text-gray-800 leading-tight">
+                                                <span className="text-gray-500 font-bold shrink-0">-</span>
+                                                <span>{inst}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
 
                                   {fu.notes && (
                                     <p className="text-gray-600 italic bg-gray-50 p-2 rounded-lg text-[11px]">
