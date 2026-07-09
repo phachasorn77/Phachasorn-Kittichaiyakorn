@@ -22,6 +22,24 @@ export interface GeneralInfo {
   riskFactors: RiskFactors;
 }
 
+export interface FollowUpRecord {
+  id: string;
+  date: string;
+  woundStatus: 'Normal' | 'Erythema' | 'Discharge' | 'InfectionSuspected' | 'Other';
+  woundStatusCustom?: string;
+  hasPain: boolean;
+  hasSwelling: boolean;
+  hasRedness: boolean;
+  hasHeat: boolean;
+  hasPus: boolean;
+  hasFever: boolean;
+  isWoundDehiscence: boolean;
+  outcome: 'Continue' | 'Discharged' | 'ReferToMD';
+  assessorName: string;
+  notes: string;
+  timestamp: number;
+}
+
 export interface AssessmentRecord {
   id: string;
   fullName: string;
@@ -33,4 +51,5 @@ export interface AssessmentRecord {
   riskFactors: RiskFactors;
   riskLevel: 'Low' | 'Moderate' | 'High';
   timestamp: number;
+  followUps?: FollowUpRecord[];
 }
